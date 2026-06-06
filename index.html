@@ -56,6 +56,7 @@
       cursor:grab; flex-shrink:0;
       border-radius:var(--radius) var(--radius) 0 0;
       position:relative; z-index:1; transition:background .3s;
+      -webkit-app-region: drag;
     }
     #header:active { cursor:grabbing; }
     #pin   { font-size:17px; margin-right:6px; pointer-events:none; }
@@ -66,6 +67,7 @@
       border-radius:6px; cursor:pointer; display:flex; align-items:center;
       justify-content:center; font-size:13px; color:var(--text);
       transition:background .15s,color .15s; flex-shrink:0; margin:0 1px;
+      -webkit-app-region: no-drag;
     }
     .hbtn:hover          { background:rgba(0,0,0,0.15); }
     #btn-close:hover     { background:#DC2626; color:#fff; }
@@ -290,22 +292,10 @@
     window.api.closeApp();
   });
 
-  // ── DRAG — header only, completely separate from resize ──────────────────────
-  let dragging=false, dragX=0, dragY=0;
-
-  header.addEventListener('mousedown', e => {
-    if (e.target.closest('.hbtn')) return;
-    if (resizing) return;
-    e.preventDefault();
-    dragging=true; dragX=e.screenX; dragY=e.screenY;
-  });
-  window.addEventListener('mousemove', e => {
-    if (!dragging || resizing) return;
-    const dx=e.screenX-dragX, dy=e.screenY-dragY;
-    dragX=e.screenX; dragY=e.screenY;
-    window.api.moveWindow({dx,dy});
-  });
-  window.addEventListener('mouseup', () => { dragging=false; });
+  // ── DRAG — handled natively by Electron via -webkit-app-region:drag CSS ───────
+  // No JS needed. The header has -webkit-app-region:drag in CSS.
+  // Buttons have -webkit-app-region:no-drag so they still work.
+  // This is the only 100% reliable way to drag a frameless Electron window.
 
   // ── RESIZE — edge/corner handles only, completely separate from drag ──────────
   let resizing=false, resDir='', resX=0, resY=0;
@@ -313,7 +303,6 @@
   document.querySelectorAll('.resizer').forEach(el => {
     el.addEventListener('mousedown', e => {
       e.preventDefault(); e.stopPropagation();
-      dragging=false;  // cancel any drag
       resizing=true; resDir=el.dataset.dir;
       resX=e.screenX; resY=e.screenY;
       document.body.style.cursor = getComputedStyle(el).cursor;

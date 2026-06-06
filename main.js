@@ -30,8 +30,12 @@ function createWindow() {
   win = new BrowserWindow({
     width: W, height: H, x: X, y: Y,
     minWidth: MIN_W, minHeight: MIN_H,
-    frame: false, transparent: true,
-    alwaysOnTop: true, resizable: false, hasShadow: true,
+    frame: false,
+    transparent: false,        // OFF — this was causing the resize bug
+    backgroundColor: '#EAB308',
+    alwaysOnTop: true,
+    resizable: false,
+    hasShadow: true,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -60,10 +64,9 @@ ipcMain.on('save-settings', (_, settings) => {
 });
 
 ipcMain.on('toggle-minimize', (_, minimized) => {
-  const [w, h] = win.getSize();
   const d = loadData();
   if (minimized) {
-    win.setSize(w, HEADER_H);
+    win.setSize(d.w || 300, HEADER_H);
   } else {
     win.setSize(d.w || 300, d.h || 340);
   }
@@ -71,14 +74,18 @@ ipcMain.on('toggle-minimize', (_, minimized) => {
   saveData(d);
 });
 
-// Move window — only called from header drag, NOT from resize
-ipcMain.on('move-window', (_, { dx, dy }) => {
-  const [x, y] = win.getPosition();
-  win.setPosition(x + dx, y + dy);
-  const d = loadData(); d.x = x + dx; d.y = y + dy; saveData(d);
+// Native drag — tell Electron to move the window itself
+ipcMain.on('start-drag', () => {
+  win.webContents.startDrag({ file: '', icon: null });
 });
 
-// Resize window — only called from edge handles
+// Absolute position move
+ipcMain.on('move-window', (_, { x, y }) => {
+  win.setPosition(Math.round(x), Math.round(y));
+  const d = loadData(); d.x = Math.round(x); d.y = Math.round(y); saveData(d);
+});
+
+// Resize from edges only
 ipcMain.on('resize-window', (_, { dx, dy, dir }) => {
   const [x, y] = win.getPosition();
   const [w, h] = win.getSize();
@@ -89,8 +96,8 @@ ipcMain.on('resize-window', (_, { dx, dy, dir }) => {
   if (dir.includes('w')) { nw = Math.max(MIN_W, w - dx); if (nw !== w) nx = x + dx; }
   if (dir.includes('n')) { nh = Math.max(MIN_H, h - dy); if (nh !== h) ny = y + dy; }
 
-  win.setBounds({ x: nx, y: ny, width: nw, height: nh });
-  const d = loadData(); d.w = nw; d.h = nh; d.x = nx; d.y = ny; saveData(d);
+  win.setBounds({ x: Math.round(nx), y: Math.round(ny), width: Math.round(nw), height: Math.round(nh) });
+  const d = loadData(); d.w = Math.round(nw); d.h = Math.round(nh); d.x = Math.round(nx); d.y = Math.round(ny); saveData(d);
 });
 
 ipcMain.on('close-app', () => app.quit());
