@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Sticky Note</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600&family=DM+Sans:wght@400;500&family=Patrick+Hand&family=Indie+Flower&family=Courier+Prime&family=Nunito:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --header:#EAB308; --body:#FEF08A; --text:#422006;
+      --hint:#A16207; --line:rgba(180,130,0,0.15);
+      --radius:14px; --shadow:0 8px 32px rgba(0,0,0,0.28),0 2px 8px rgba(0,0,0,0.18);
+    }
+    [data-theme="pink"]   { --header:#EC4899; --body:#FDF2F8; --text:#500724; --hint:#9D174D; --line:rgba(236,72,153,0.12); }
+    [data-theme="blue"]   { --header:#3B82F6; --body:#EFF6FF; --text:#1E3A5F; --hint:#3B82F6; --line:rgba(59,130,246,0.12); }
+    [data-theme="green"]  { --header:#22C55E; --body:#F0FDF4; --text:#14532D; --hint:#16A34A; --line:rgba(34,197,94,0.12); }
+    [data-theme="dark"]   { --header:#1E1E2E; --body:#2A2A3E; --text:#E2E8F0; --hint:#94A3B8; --line:rgba(255,255,255,0.06); }
+    [data-theme="purple"] { --header:#7C3AED; --body:#F5F3FF; --text:#2E1065; --hint:#7C3AED; --line:rgba(124,58,237,0.12); }
+    [data-theme="orange"] { --header:#F97316; --body:#FFF7ED; --text:#431407; --hint:#EA580C; --line:rgba(249,115,22,0.12); }
+
+    html, body { width:100%; height:100%; overflow:hidden; background:transparent; user-select:none; }
+
+    /* Resize handles — edges + corners only, separate from header */
+    .resizer { position:fixed; z-index:1000; }
+    .resizer.n  { top:0;    left:10px; right:10px;  height:5px;  cursor:n-resize;  }
+    .resizer.s  { bottom:0; left:10px; right:10px;  height:5px;  cursor:s-resize;  }
+    .resizer.w  { left:0;   top:10px;  bottom:10px; width:5px;   cursor:w-resize;  }
+    .resizer.e  { right:0;  top:10px;  bottom:10px; width:5px;   cursor:e-resize;  }
+    .resizer.nw { top:0;    left:0;    width:10px;  height:10px; cursor:nw-resize; }
+    .resizer.ne { top:0;    right:0;   width:10px;  height:10px; cursor:ne-resize; }
+    .resizer.sw { bottom:0; left:0;    width:10px;  height:10px; cursor:sw-resize; }
+    .resizer.se { bottom:0; right:0;   width:10px;  height:10px; cursor:se-resize; }
+    body.minimized .resizer.s,
+    body.minimized .resizer.sw,
+    body.minimized .resizer.se { display:none; }
+
+    #card {
+      position:absolute; inset:0;
+      border-radius:var(--radius);
+      background:var(--body);
+      box-shadow:var(--shadow);
+      display:flex; flex-direction:column; overflow:hidden;
+      transition:background .3s;
+    }
+    #card::before {
+      content:''; position:absolute; inset:0; border-radius:var(--radius);
+      background-image:repeating-linear-gradient(transparent,transparent 27px,var(--line) 27px,var(--line) 28px);
+      pointer-events:none; z-index:0;
+    }
+
+    #header {
+      height:48px; background:var(--header);
+      display:flex; align-items:center; padding:0 4px 0 12px;
+      cursor:grab; flex-shrink:0;
+      border-radius:var(--radius) var(--radius) 0 0;
+      position:relative; z-index:1; transition:background .3s;
+    }
+    #header:active { cursor:grabbing; }
+    #pin   { font-size:17px; margin-right:6px; pointer-events:none; }
+    #title { font-family:'DM Sans',sans-serif; font-weight:500; font-size:12px; color:var(--text); flex:1; pointer-events:none; opacity:.85; }
+
+    .hbtn {
+      width:26px; height:26px; border:none; background:transparent;
+      border-radius:6px; cursor:pointer; display:flex; align-items:center;
+      justify-content:center; font-size:13px; color:var(--text);
+      transition:background .15s,color .15s; flex-shrink:0; margin:0 1px;
+    }
+    .hbtn:hover          { background:rgba(0,0,0,0.15); }
+    #btn-close:hover     { background:#DC2626; color:#fff; }
+
+    #body { flex:1; display:flex; flex-direction:column; position:relative; z-index:1; overflow:hidden; }
+    #date-strip { font-family:'DM Sans',sans-serif; font-size:9px; color:var(--hint); padding:4px 14px 0; letter-spacing:.5px; text-transform:uppercase; }
+    #note-area {
+      flex:1; width:100%; border:none; outline:none; resize:none;
+      background:transparent; padding:4px 14px 10px;
+      font-family:'Caveat',cursive; font-size:19px; line-height:28px;
+      color:var(--text); caret-color:var(--hint);
+      user-select:text; overflow-y:auto; transition:color .3s;
+    }
+    #note-area::placeholder { color:var(--hint); opacity:.6; }
+    #note-area::-webkit-scrollbar { width:3px; }
+    #note-area::-webkit-scrollbar-thumb { background:rgba(0,0,0,.15); border-radius:3px; }
+
+    #footer { height:24px; display:flex; align-items:center; justify-content:flex-end; padding:0 8px; position:relative; z-index:1; }
+    #char-count { font-family:'DM Sans',sans-serif; font-size:9px; color:var(--hint); opacity:.5; }
+
+    body.minimized #body, body.minimized #footer { display:none; }
+    body.minimized #card::before { display:none; }
+    body.minimized #header { border-radius:var(--radius); }
+
+    /* Settings panel */
+    #settings-panel {
+      position:absolute; top:48px; left:0; right:0; bottom:0;
+      background:var(--body); z-index:50;
+      display:none; flex-direction:column;
+      padding:12px; gap:12px; overflow-y:auto;
+      border-radius:0 0 var(--radius) var(--radius);
+    }
+    #settings-panel.open { display:flex; }
+
+    .s-label {
+      font-family:'DM Sans',sans-serif; font-weight:500; font-size:9px;
+      color:var(--hint); text-transform:uppercase; letter-spacing:.6px; margin-bottom:5px;
+    }
+    #theme-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+    .theme-swatch {
+      height:34px; border-radius:8px; border:2px solid transparent;
+      cursor:pointer; display:flex; align-items:flex-end; justify-content:center;
+      padding-bottom:4px; transition:transform .15s,border-color .15s;
+      position:relative; overflow:hidden;
+    }
+    .theme-swatch:hover   { transform:scale(1.06); }
+    .theme-swatch.active  { border-color:rgba(0,0,0,0.4); }
+    .sw-top  { position:absolute; top:0; left:0; right:0; height:11px; }
+    .sw-name { font-family:'DM Sans',sans-serif; font-size:8px; font-weight:500; }
+
+    #font-list { display:flex; flex-direction:column; gap:5px; }
+    .font-opt {
+      padding:7px 10px; border-radius:7px; border:2px solid transparent;
+      cursor:pointer; background:rgba(0,0,0,0.05);
+      display:flex; align-items:center; justify-content:space-between;
+      transition:border-color .15s,background .15s;
+    }
+    .font-opt:hover  { background:rgba(0,0,0,0.08); }
+    .font-opt.active { border-color:var(--header); }
+    .f-prev { font-size:14px; color:var(--text); }
+    .f-name { font-family:'DM Sans',sans-serif; font-size:8px; color:var(--hint); text-transform:uppercase; letter-spacing:.4px; }
+
+    #sz-row { display:flex; align-items:center; gap:8px; }
+    #sz-slider { flex:1; accent-color:var(--header); cursor:pointer; }
+    #sz-val { font-family:'DM Sans',sans-serif; font-size:10px; color:var(--hint); min-width:26px; text-align:right; }
+
+    #btn-done {
+      padding:7px; border-radius:8px; background:var(--header); color:var(--text);
+      font-family:'DM Sans',sans-serif; font-size:11px; font-weight:500;
+      border:none; cursor:pointer; transition:opacity .15s; margin-top:auto;
+    }
+    #btn-done:hover { opacity:.85; }
+
+    @keyframes popIn { from{transform:scale(.88) translateY(10px);opacity:0} to{transform:scale(1) translateY(0);opacity:1} }
+    #card { animation:popIn .25s cubic-bezier(.34,1.56,.64,1) both; }
+  </style>
+</head>
+<body>
+
+<div class="resizer nw" data-dir="nw"></div>
+<div class="resizer n"  data-dir="n"></div>
+<div class="resizer ne" data-dir="ne"></div>
+<div class="resizer w"  data-dir="w"></div>
+<div class="resizer e"  data-dir="e"></div>
+<div class="resizer sw" data-dir="sw"></div>
+<div class="resizer s"  data-dir="s"></div>
+<div class="resizer se" data-dir="se"></div>
+
+<div id="card">
+  <div id="header">
+    <span id="pin">📌</span>
+    <span id="title">Sticky Note</span>
+    <button class="hbtn" id="btn-settings" title="Settings">⚙</button>
+    <button class="hbtn" id="btn-min"      title="Minimize">─</button>
+    <button class="hbtn" id="btn-close"    title="Close">✕</button>
+  </div>
+
+  <div id="body">
+    <div id="date-strip"></div>
+    <textarea id="note-area" placeholder="Write something to remember…" spellcheck="false"></textarea>
+  </div>
+
+  <div id="footer">
+    <span id="char-count"></span>
+  </div>
+
+  <div id="settings-panel">
+    <div>
+      <div class="s-label">Theme</div>
+      <div id="theme-grid">
+        <div class="theme-swatch" data-theme="yellow" style="background:#FEF08A"><div class="sw-top" style="background:#EAB308"></div><span class="sw-name" style="color:#422006">Yellow</span></div>
+        <div class="theme-swatch" data-theme="pink"   style="background:#FDF2F8"><div class="sw-top" style="background:#EC4899"></div><span class="sw-name" style="color:#500724">Pink</span></div>
+        <div class="theme-swatch" data-theme="blue"   style="background:#EFF6FF"><div class="sw-top" style="background:#3B82F6"></div><span class="sw-name" style="color:#1E3A5F">Blue</span></div>
+        <div class="theme-swatch" data-theme="green"  style="background:#F0FDF4"><div class="sw-top" style="background:#22C55E"></div><span class="sw-name" style="color:#14532D">Green</span></div>
+        <div class="theme-swatch" data-theme="purple" style="background:#F5F3FF"><div class="sw-top" style="background:#7C3AED"></div><span class="sw-name" style="color:#2E1065">Purple</span></div>
+        <div class="theme-swatch" data-theme="orange" style="background:#FFF7ED"><div class="sw-top" style="background:#F97316"></div><span class="sw-name" style="color:#431407">Orange</span></div>
+        <div class="theme-swatch" data-theme="dark" style="background:#2A2A3E;grid-column:span 3"><div class="sw-top" style="background:#1E1E2E"></div><span class="sw-name" style="color:#E2E8F0">Dark</span></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="s-label">Font</div>
+      <div id="font-list">
+        <div class="font-opt" data-font="Caveat"><span class="f-prev" style="font-family:'Caveat',cursive">Hello world</span><span class="f-name">Caveat</span></div>
+        <div class="font-opt" data-font="Patrick Hand"><span class="f-prev" style="font-family:'Patrick Hand',cursive">Hello world</span><span class="f-name">Patrick Hand</span></div>
+        <div class="font-opt" data-font="Indie Flower"><span class="f-prev" style="font-family:'Indie Flower',cursive">Hello world</span><span class="f-name">Indie Flower</span></div>
+        <div class="font-opt" data-font="Nunito"><span class="f-prev" style="font-family:'Nunito',sans-serif">Hello world</span><span class="f-name">Nunito</span></div>
+        <div class="font-opt" data-font="Courier Prime"><span class="f-prev" style="font-family:'Courier Prime',monospace">Hello world</span><span class="f-name">Courier Prime</span></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="s-label">Font Size</div>
+      <div id="sz-row">
+        <span style="font-size:9px;color:var(--hint)">A</span>
+        <input type="range" id="sz-slider" min="13" max="26" value="19" step="1">
+        <span style="font-size:15px;color:var(--hint)">A</span>
+        <span id="sz-val">19px</span>
+      </div>
+    </div>
+
+    <button id="btn-done">Done</button>
+  </div>
+</div>
+
+<script>
+(async () => {
+  const noteArea    = document.getElementById('note-area');
+  const btnMin      = document.getElementById('btn-min');
+  const btnClose    = document.getElementById('btn-close');
+  const btnSettings = document.getElementById('btn-settings');
+  const charCount   = document.getElementById('char-count');
+  const dateStrip   = document.getElementById('date-strip');
+  const header      = document.getElementById('header');
+  const card        = document.getElementById('card');
+  const panel       = document.getElementById('settings-panel');
+  const szSlider    = document.getElementById('sz-slider');
+  const szVal       = document.getElementById('sz-val');
+
+  dateStrip.textContent = new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+
+  let isMinimized  = false;
+  let curTheme     = 'yellow';
+  let curFont      = 'Caveat';
+  let curSize      = 19;
+
+  const data = await window.api.loadNote();
+  if (data.text)      noteArea.value = data.text, updateCount();
+  if (data.minimized) { isMinimized=true; document.body.classList.add('minimized'); btnMin.textContent='□'; }
+  if (data.theme)     curTheme = data.theme;
+  if (data.font)      curFont  = data.font;
+  if (data.fontSize)  curSize  = data.fontSize;
+
+  applyTheme(curTheme); applyFont(curFont); applySize(curSize);
+
+  function applyTheme(t) {
+    card.setAttribute('data-theme', t);
+    document.body.setAttribute('data-theme', t);
+    document.querySelectorAll('.theme-swatch').forEach(s => s.classList.toggle('active', s.dataset.theme===t));
+  }
+  function applyFont(f) {
+    noteArea.style.fontFamily = `'${f}', cursive`;
+    document.querySelectorAll('.font-opt').forEach(o => o.classList.toggle('active', o.dataset.font===f));
+  }
+  function applySize(s) {
+    noteArea.style.fontSize = s+'px';
+    szSlider.value = s; szVal.textContent = s+'px';
+  }
+
+  // Settings
+  btnSettings.addEventListener('click', e => { e.stopPropagation(); panel.classList.toggle('open'); });
+  document.getElementById('btn-done').addEventListener('click', () => {
+    panel.classList.remove('open');
+    window.api.saveSettings({ theme:curTheme, font:curFont, fontSize:curSize });
+  });
+  document.querySelectorAll('.theme-swatch').forEach(s => s.addEventListener('click', () => { curTheme=s.dataset.theme; applyTheme(curTheme); }));
+  document.querySelectorAll('.font-opt').forEach(o => o.addEventListener('click', () => { curFont=o.dataset.font; applyFont(curFont); }));
+  szSlider.addEventListener('input', () => { curSize=parseInt(szSlider.value); applySize(curSize); });
+
+  // Auto-save
+  let saveTimer;
+  noteArea.addEventListener('input', () => {
+    updateCount();
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => window.api.saveNote(noteArea.value), 400);
+  });
+  function updateCount() { const n=noteArea.value.length; charCount.textContent=n?`${n} chars`:''; }
+
+  // Minimize
+  btnMin.addEventListener('click', e => {
+    e.stopPropagation();
+    isMinimized = !isMinimized;
+    document.body.classList.toggle('minimized', isMinimized);
+    btnMin.textContent = isMinimized ? '□' : '─';
+    window.api.toggleMinimize(isMinimized);
+  });
+
+  // Close
+  btnClose.addEventListener('click', e => {
+    e.stopPropagation();
+    window.api.saveNote(noteArea.value);
+    window.api.closeApp();
+  });
+
+  // ── DRAG — header only, completely separate from resize ──────────────────────
+  let dragging=false, dragX=0, dragY=0;
+
+  header.addEventListener('mousedown', e => {
+    if (e.target.closest('.hbtn')) return;
+    if (resizing) return;
+    e.preventDefault();
+    dragging=true; dragX=e.screenX; dragY=e.screenY;
+  });
+  window.addEventListener('mousemove', e => {
+    if (!dragging || resizing) return;
+    const dx=e.screenX-dragX, dy=e.screenY-dragY;
+    dragX=e.screenX; dragY=e.screenY;
+    window.api.moveWindow({dx,dy});
+  });
+  window.addEventListener('mouseup', () => { dragging=false; });
+
+  // ── RESIZE — edge/corner handles only, completely separate from drag ──────────
+  let resizing=false, resDir='', resX=0, resY=0;
+
+  document.querySelectorAll('.resizer').forEach(el => {
+    el.addEventListener('mousedown', e => {
+      e.preventDefault(); e.stopPropagation();
+      dragging=false;  // cancel any drag
+      resizing=true; resDir=el.dataset.dir;
+      resX=e.screenX; resY=e.screenY;
+      document.body.style.cursor = getComputedStyle(el).cursor;
+    });
+  });
+  window.addEventListener('mousemove', e => {
+    if (!resizing) return;
+    const dx=e.screenX-resX, dy=e.screenY-resY;
+    resX=e.screenX; resY=e.screenY;
+    window.api.resizeWindow({dx,dy,dir:resDir});
+  });
+  window.addEventListener('mouseup', () => {
+    if (resizing) { resizing=false; document.body.style.cursor=''; }
+  });
+
+})();
+</script>
+</body>
+</html>
